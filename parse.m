@@ -1,48 +1,56 @@
-% Open the file for reading
-filename = 'sinus_taki.bs';
-fid = fopen(filename, 'r');
+function data = parse(file_path)
+  % Open the file and read its contents
+  fid = fopen(file_path, 'r');
+  if fid == -1
+    error('Could not open file: %s', file_path);
+  end
+  content = fscanf(fid, '%c');
+  fclose(fid);
 
-% Initialize variables
-knots = [];
-cpoints = [];
-degree = 0;
+  % Initialize the data structure
+  data = struct();
 
-% Read the file line by line
-while ~feof(fid)
-    line = strtrim(fgetl(fid)); % Get a line and trim whitespace
-    line
-    if startsWith(line, 'degree')
-        degree = sscanf(line, 'degree %d'); % Extract the degree
-    elseif startsWith(line, 'knots')
-        % Extract the knots
-        knots_start = strfind(line, '{') + 1;
-        knots_end = strfind(line, '}') - 1;
-        knots = sscanf(line(knots_start:knots_end), '%f,');
-    elseif startsWith(line, 'cpoints')
-        % Read control points in the next lines
-        while ~startsWith(line, 'cpointsmk')
-            if startsWith(line, '{') && ~startsWith(line, 'cpoints')
-                % Remove braces and extract point values
-                line = strrep(line, '{', '');
-                line = strrep(line, '}', '');
-                cpoint = sscanf(line, '%f,');
-                cpoints = [cpoints; cpoint'];
-            end
-            line = strtrim(fgetl(fid));
-        end
+  % Parse the dimension
+  dim_match = regexp(content, 'dim\s+(\d+)', 'tokens');
+  if ~isempty(dim_match)
+    data.dimension = str2double(dim_match{1}{1});
+  else
+    data.dimension = NaN;
+  end
+
+  % Parse the degree
+  degree_match = regexp(content, 'degree\s+(\d+)', 'tokens');
+  if ~isempty(degree_match)
+    data.degree = str2double(degree_match{1}{1});
+  else
+    data.degree = NaN;
+  end
+  % Parse the knots
+  knots_match = regexp(content, 'knots\s*\{([^\}]*)\}', 'tokens');
+  if ~isempty(knots_match)
+    clean = strrep(knots_match{1}{1}, " ", "");
+    string_cells = strsplit(clean, ",");
+    float_list = str2double(string_cells);
+    data.knots = float_list;
+  else
+    data.knots = [];
+  end
+  % Parse the control points
+  start_index = strfind(content, 'cpoints {');
+  end_index = strfind(content, '}}');
+  if ~(isempty(start_index) || isempty(end_index))
+    text = content(start_index:end_index);
+    pairs = regexp(text, '\{([-+]?\d*\.\d+),([-+]?\d*\.\d+)\}', 'tokens');
+    list = [];
+    for i = 1:length(pairs)
+      vals = [str2num(pairs{i}{1}), str2num(pairs{i}{2})];
+      list = [list; vals];
     end
+    data.control_points = list;
+  else
+    data.control_points = [];
+  end
+
 end
 
-% Close the file
-fclose(fid);
 
-% Save the variables in an Octave .mat file
-save('points.mat', 'knots', 'cpoints', 'degree');
-
-% Display the results
-disp('Knots:');
-disp(knots);
-disp('Control Points:');
-disp(cpoints);
-disp('Degree:');
-disp(degree);
